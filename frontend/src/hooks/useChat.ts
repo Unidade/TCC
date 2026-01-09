@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useInitialMessage, useChatMutation } from "../lib/queries/chat"
+import { clearSession } from "../lib/api"
 
 interface Message {
   id: string
@@ -27,6 +28,7 @@ interface UseChatReturn {
 
 export function useChat(personaId?: number): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
+  const messagesRef = useRef<Message[]>([])
   const [input, setInput] = useState("")
   const [currentAudio, setCurrentAudio] = useState<AudioData | null>(null)
   const [currentText, setCurrentText] = useState("")
@@ -37,13 +39,15 @@ export function useChat(personaId?: number): UseChatReturn {
 
   useEffect(() => {
     if (initialData) {
-      setMessages([
+      const initialMessage = [
         {
           id: "initial",
-          role: "assistant",
+          role: "assistant" as const,
           content: initialData.text,
         },
-      ])
+      ]
+      setMessages(initialMessage)
+      messagesRef.current = initialMessage
       if (initialData.audio) {
         setCurrentAudio({
           audio: initialData.audio,
@@ -56,7 +60,15 @@ export function useChat(personaId?: number): UseChatReturn {
 
   useEffect(() => {
     if (personaId) {
+      // Clear the old session on the backend before resetting
+      const oldSessionId = sessionId.current
+      clearSession(oldSessionId).catch((err) => {
+        console.error("Failed to clear session:", err)
+        // Continue anyway - session cleanup failure shouldn't block persona switch
+      })
+
       setMessages([])
+      messagesRef.current = []
       setCurrentAudio(null)
       setCurrentText("")
       sessionId.current = crypto.randomUUID()
@@ -73,22 +85,28 @@ export function useChat(personaId?: number): UseChatReturn {
       setInput("")
 
       const userMsgId = crypto.randomUUID()
-      setMessages((prev) => [...prev, { id: userMsgId, role: "user", content: userMessage }])
+      const userMsg: Message = { id: userMsgId, role: "user", content: userMessage }
+      setMessages((prev) => {
+        const updated = [...prev, userMsg]
+        messagesRef.current = updated
+        return updated
+      })
 
       try {
+        // Use messagesRef to get the latest messages including the user message we just added
+        const currentMessages = messagesRef.current
         const data = await chatMutation.mutateAsync({
-          messages: [
-            ...messages.map((m) => ({ role: m.role, content: m.content })),
-            { role: "user", content: userMessage },
-          ],
+          messages: currentMessages.map((m) => ({ role: m.role, content: m.content })),
           persona_id: personaId,
         })
 
         const assistantMsgId = crypto.randomUUID()
-        setMessages((prev) => [
-          ...prev,
-          { id: assistantMsgId, role: "assistant", content: data.text },
-        ])
+        const assistantMsg: Message = { id: assistantMsgId, role: "assistant", content: data.text }
+        setMessages((prev) => {
+          const updated = [...prev, assistantMsg]
+          messagesRef.current = updated
+          return updated
+        })
 
         if (data.audio) {
           setCurrentAudio({
@@ -101,7 +119,7 @@ export function useChat(personaId?: number): UseChatReturn {
         console.error("Error sending message:", err)
       }
     },
-    [input, messages, chatMutation, personaId]
+    [input, chatMutation, personaId]
   )
 
   const clearAudio = useCallback(() => {

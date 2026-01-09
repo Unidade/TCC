@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useGraph } from "@react-three/fiber";
 import { useGLTF, useAnimations, useFBX } from "@react-three/drei";
 import { SkeletonUtils } from "three-stdlib";
@@ -37,7 +37,7 @@ interface AvatarProps {
   scale?: number;
 }
 
-export function Avatar({
+function AvatarComponent({
   text = "",
   audioUrl,
   duration,
@@ -51,15 +51,30 @@ export function Avatar({
   const nodes = rawNodes as unknown as AvatarNodes;
 
   const { animations: idleAnimation } = useFBX("/animations/Idle.fbx");
-  idleAnimation[0].name = "Idle";
+
+  // Filter animation tracks that don't exist in the model (fixes THREE.PropertyBinding warning)
+  const filteredAnimation = useMemo(() => {
+    const clip = idleAnimation[0].clone();
+    clip.name = "Idle";
+    // Remove tracks that reference "Armature" which doesn't exist in this model
+    clip.tracks = clip.tracks.filter((track) => {
+      const parts = track.name.split(".");
+      return parts[0] !== "Armature";
+    });
+    return clip;
+  }, [idleAnimation]);
 
   const [animation] = useState("Idle");
   const group = useRef<THREE.Group>(null);
-  const { actions } = useAnimations([idleAnimation[0]], group);
+  const { actions } = useAnimations([filteredAnimation], group);
   const currentViseme = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const visemeIntervalRef = useRef<number | null>(null);
   const morphTargetSmoothing = 0.3;
+
+  // Store onAudioEnd in a ref to avoid re-triggering effects when it changes
+  const onAudioEndRef = useRef(onAudioEnd);
+  onAudioEndRef.current = onAudioEnd;
 
   useEffect(() => {
     if (actions[animation]) {
@@ -132,7 +147,7 @@ export function Avatar({
           }
         }, 300);
 
-        onAudioEnd?.();
+        onAudioEndRef.current?.();
       };
 
       // Play audio
@@ -151,7 +166,7 @@ export function Avatar({
         visemeIntervalRef.current = null;
       }
     };
-  }, [audioUrl, text, duration, onAudioEnd, nodes]);
+  }, [audioUrl, text, duration, nodes]);
 
   useFrame(() => {
     if (!nodes.Wolf3D_Head || !nodes.Wolf3D_Head.morphTargetDictionary) return;
@@ -266,5 +281,9 @@ export function Avatar({
   );
 }
 
+// Memoize to prevent re-renders when parent updates unrelated state
+export const Avatar = React.memo(AvatarComponent);
+
 // Preload the model
 useGLTF.preload("/models/674d75af3c0313725248ed0d.glb");
+

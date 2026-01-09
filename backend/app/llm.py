@@ -6,7 +6,7 @@ from typing import Optional
 
 
 class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "google/gemma-3-4b-it", system_prompt: Optional[str] = None):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "qwen2.5:1.5b", system_prompt: Optional[str] = None):
         self.base_url = base_url
         self.model = model
         self.system_prompt = system_prompt

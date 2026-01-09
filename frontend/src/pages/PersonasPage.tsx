@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus, Edit, Trash2, ArrowLeft, Loader2 } from "lucide-react"
-import { PersonaCreate, Persona } from "@/lib/api"
+import { type PersonaCreate, type Persona } from "@/lib/api"
 import {
   usePersonas,
   useCreatePersona,
@@ -76,7 +76,11 @@ export function PersonasPage() {
   }
 
   const handleSubmit = async () => {
-    if (!formData.name.trim() || !formData.system_prompt.trim() || !formData.initial_message.trim()) {
+    if (
+      !formData.name.trim() ||
+      !formData.system_prompt.trim() ||
+      !formData.initial_message.trim()
+    ) {
       setError("Nome, prompt do sistema e mensagem inicial são obrigatórios")
       return
     }
@@ -157,18 +161,10 @@ export function PersonasPage() {
                   )}
                 </div>
                 <div className="flex gap-2 ml-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleOpenEdit(persona)}
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(persona)}>
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(persona.id)}
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(persona.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -191,16 +187,16 @@ export function PersonasPage() {
 
         {personas && personas.length === 0 && (
           <Card className="p-12 text-center">
-            <p className="text-muted-foreground">Ainda não há personas. Crie sua primeira persona para começar.</p>
+            <p className="text-muted-foreground">
+              Ainda não há personas. Crie sua primeira persona para começar.
+            </p>
           </Card>
         )}
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {editingPersona ? "Editar Persona" : "Criar Nova Persona"}
-              </DialogTitle>
+              <DialogTitle>{editingPersona ? "Editar Persona" : "Criar Nova Persona"}</DialogTitle>
               <DialogDescription>
                 {editingPersona
                   ? "Atualize os detalhes da persona abaixo."

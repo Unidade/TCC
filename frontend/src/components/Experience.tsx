@@ -1,3 +1,4 @@
+import React from "react";
 import { Environment, useTexture } from "@react-three/drei";
 import { Avatar } from "./Avatar";
 import { useThree } from "@react-three/fiber";
@@ -10,7 +11,7 @@ interface ExperienceProps {
   onAudioEnd?: () => void;
 }
 
-export function Experience({
+function ExperienceComponent({
   text,
   audioUrl,
   duration,
@@ -37,3 +38,7 @@ export function Experience({
     </>
   );
 }
+
+// Memoize to prevent re-renders when parent updates unrelated state
+export const Experience = React.memo(ExperienceComponent);
+

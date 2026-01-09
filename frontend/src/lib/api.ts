@@ -33,7 +33,7 @@ export interface PersonaUpdate {
 export async function getPersonas(): Promise<Persona[]> {
   const response = await fetch(`${API_BASE}/api/personas`)
   if (!response.ok) {
-    throw new Error(`Failed to fetch personas: ${response.statusText}`)
+    throw new Error(`Erro ao carregar personas: ${response.statusText}`)
   }
   return response.json()
 }
@@ -41,7 +41,7 @@ export async function getPersonas(): Promise<Persona[]> {
 export async function getPersona(id: number): Promise<Persona> {
   const response = await fetch(`${API_BASE}/api/personas/${id}`)
   if (!response.ok) {
-    throw new Error(`Failed to fetch persona: ${response.statusText}`)
+    throw new Error(`Erro ao carregar persona: ${response.statusText}`)
   }
   return response.json()
 }
@@ -56,7 +56,7 @@ export async function createPersona(persona: PersonaCreate): Promise<Persona> {
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }))
-    throw new Error(error.detail || `Failed to create persona: ${response.statusText}`)
+    throw new Error(error.detail || `Erro ao criar persona: ${response.statusText}`)
   }
   return response.json()
 }
@@ -71,7 +71,7 @@ export async function updatePersona(id: number, persona: PersonaUpdate): Promise
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }))
-    throw new Error(error.detail || `Failed to update persona: ${response.statusText}`)
+    throw new Error(error.detail || `Erro ao atualizar persona: ${response.statusText}`)
   }
   return response.json()
 }
@@ -82,7 +82,7 @@ export async function deletePersona(id: number): Promise<void> {
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }))
-    throw new Error(error.detail || `Failed to delete persona: ${response.statusText}`)
+    throw new Error(error.detail || `Erro ao excluir persona: ${response.statusText}`)
   }
 }
 
@@ -148,4 +148,31 @@ export async function sendChatMessage(
   }
 
   return data
+}
+
+export async function clearSession(sessionId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/session/${sessionId}`, {
+    method: "DELETE",
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }))
+    throw new Error(error.detail || `Erro ao limpar sessão: ${response.statusText}`)
+  }
+}
+
+export async function checkServerHealth(): Promise<boolean> {
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+    const response = await fetch(`${API_BASE}/health`, {
+      method: "GET",
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+    return response.ok
+  } catch {
+    return false
+  }
 }

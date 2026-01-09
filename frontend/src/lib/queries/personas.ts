@@ -5,9 +5,8 @@ import {
   createPersona,
   updatePersona,
   deletePersona,
-  Persona,
-  PersonaCreate,
-  PersonaUpdate,
+  type PersonaCreate,
+  type PersonaUpdate,
 } from "../api"
 
 export const personaKeys = {

@@ -2,21 +2,40 @@
 
 Python FastAPI backend for the interview simulator with Ollama LLM and Kokoro TTS.
 
-## Setup
+### UV Requirements
 
-1. Install Python dependencies:
+- **Python ≥ 3.10**
+- **uv ≥ 0.4**
+- **Ollama installed & running**
+
+### UV Setup (Correct Commands)
+
 ```bash
-pip install -r requirements.txt
+# Initialize project (if not already)
+uv init
+
+# Create & use virtual environment
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Add dependencies
+uv add fastapi uvicorn ollama kokoro python-multipart
+
+# Install from lockfile (CI/clean setups)
+uv sync
 ```
 
-2. Make sure Ollama is running locally with the model `google/gemma-3-4b-it`:
+### Run Server (via uv)
+
+```bash
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+### Ollama Requirement
+
 ```bash
 ollama pull google/gemma-3-4b-it
-```
-
-3. Run the server:
-```bash
-uvicorn app.main:app --reload --port 8000
+ollama serve
 ```
 
 ## API Endpoints
@@ -30,6 +49,7 @@ uvicorn app.main:app --reload --port 8000
 ### Chat Endpoints
 
 #### Simple Chat (Recommended)
+
 ```
 POST /api/chat/simple
 Content-Type: application/json
@@ -42,6 +62,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "text": "Response text",
@@ -51,6 +72,7 @@ Content-Type: application/json
 ```
 
 #### Streaming Chat (AI SDK Compatible)
+
 ```
 POST /api/chat
 Content-Type: application/json
