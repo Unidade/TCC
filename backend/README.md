@@ -38,6 +38,30 @@ ollama pull google/gemma-3-4b-it
 ollama serve
 ```
 
+### espeak-ng Requirement (for Kokoro TTS)
+
+Kokoro TTS requires **espeak-ng** for phoneme processing.
+
+**Windows:**
+
+```bash
+winget install --id eSpeak-NG.eSpeak-NG -e
+```
+
+**Linux (Debian/Ubuntu):**
+
+```bash
+sudo apt-get install espeak-ng
+```
+
+**macOS:**
+
+```bash
+brew install espeak-ng
+```
+
+> **Note:** For Brazilian Portuguese (`pt-BR`), Kokoro uses `lang_code='p'` with `espeak-ng pt-br`. For American English, it uses `lang_code='a'`. See the [Kokoro documentation](https://github.com/hexgrad/kokoro) for available voices and language codes.
+
 ## API Endpoints
 
 ### REST Endpoints
