@@ -1,32 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useGraph } from "@react-three/fiber";
+import React, { useState, useEffect, useRef } from "react";
+import { useGraph, useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, useFBX } from "@react-three/drei";
 import { SkeletonUtils } from "three-stdlib";
 import { CORRESPONDING_VISEME } from "@/lib/viseme";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
-
-// Type for SkinnedMesh with morph targets
-type SkinnedMeshWithMorphTargets = THREE.SkinnedMesh & {
-  morphTargetDictionary?: { [key: string]: number };
-  morphTargetInfluences?: number[];
-};
-
-// Type for the avatar nodes
-interface AvatarNodes {
-  Hips: THREE.Object3D;
-  Wolf3D_Hair: THREE.SkinnedMesh;
-  Wolf3D_Glasses: THREE.SkinnedMesh;
-  Wolf3D_Body: THREE.SkinnedMesh;
-  Wolf3D_Outfit_Bottom: THREE.SkinnedMesh;
-  Wolf3D_Outfit_Footwear: THREE.SkinnedMesh;
-  Wolf3D_Outfit_Top: THREE.SkinnedMesh;
-  EyeLeft: SkinnedMeshWithMorphTargets;
-  EyeRight: SkinnedMeshWithMorphTargets;
-  Wolf3D_Head: SkinnedMeshWithMorphTargets;
-  Wolf3D_Teeth: SkinnedMeshWithMorphTargets;
-  [key: string]: THREE.Object3D;
-}
 
 interface AvatarProps {
   text?: string;
@@ -37,36 +14,29 @@ interface AvatarProps {
   scale?: number;
 }
 
-function AvatarComponent({
+export function Avatar({
   text = "",
   audioUrl,
   duration,
   onAudioEnd,
   position = [0, -5, 5],
   scale = 3,
+  ...props
 }: AvatarProps) {
   const { scene } = useGLTF("/models/674d75af3c0313725248ed0d.glb");
   const clone = React.useMemo(() => SkeletonUtils.clone(scene), [scene]);
-  const { nodes: rawNodes, materials } = useGraph(clone);
-  const nodes = rawNodes as unknown as AvatarNodes;
+  const { nodes, materials } = useGraph(clone) as { nodes: any; materials: any };
 
   const { animations: idleAnimation } = useFBX("/animations/Idle.fbx");
 
-  // Filter animation tracks that don't exist in the model (fixes THREE.PropertyBinding warning)
-  const filteredAnimation = useMemo(() => {
-    const clip = idleAnimation[0].clone();
-    clip.name = "Idle";
-    // Remove tracks that reference "Armature" which doesn't exist in this model
-    clip.tracks = clip.tracks.filter((track) => {
-      const parts = track.name.split(".");
-      return parts[0] !== "Armature";
-    });
-    return clip;
-  }, [idleAnimation]);
+  // Set animation name
+  if (idleAnimation[0]) {
+    idleAnimation[0].name = "Idle";
+  }
 
   const [animation] = useState("Idle");
   const group = useRef<THREE.Group>(null);
-  const { actions } = useAnimations([filteredAnimation], group);
+  const { actions } = useAnimations([idleAnimation[0]], group);
   const currentViseme = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const visemeIntervalRef = useRef<number | null>(null);
@@ -77,12 +47,10 @@ function AvatarComponent({
   onAudioEndRef.current = onAudioEnd;
 
   useEffect(() => {
-    if (actions[animation]) {
-      actions[animation]?.reset().fadeIn(0.5).play();
-      return () => {
-        actions[animation]?.fadeOut(0.5);
-      };
-    }
+    actions[animation] && actions[animation]?.reset().fadeIn(0.5).play();
+    return () => {
+      actions[animation] && actions[animation]?.fadeOut(0.5);
+    };
   }, [animation, actions]);
 
   useEffect(() => {
@@ -133,18 +101,13 @@ function AvatarComponent({
 
         // Reset morph targets
         setTimeout(() => {
-          const headDict = nodes.Wolf3D_Head?.morphTargetDictionary;
-          if (headDict) {
-            Object.keys(headDict).forEach((key) => {
-              const index = headDict[key];
-              if (nodes.Wolf3D_Head?.morphTargetInfluences) {
-                nodes.Wolf3D_Head.morphTargetInfluences[index] = 0;
-              }
-              if (nodes.Wolf3D_Teeth?.morphTargetInfluences) {
-                nodes.Wolf3D_Teeth.morphTargetInfluences[index] = 0;
-              }
-            });
-          }
+          Object.keys(nodes.Wolf3D_Head.morphTargetDictionary).forEach(
+            (key) => {
+              const index = nodes.Wolf3D_Head.morphTargetDictionary[key];
+              nodes.Wolf3D_Head.morphTargetInfluences[index] = 0;
+              nodes.Wolf3D_Teeth.morphTargetInfluences[index] = 0;
+            }
+          );
         }, 300);
 
         onAudioEndRef.current?.();
@@ -169,51 +132,42 @@ function AvatarComponent({
   }, [audioUrl, text, duration, nodes]);
 
   useFrame(() => {
-    if (!nodes.Wolf3D_Head || !nodes.Wolf3D_Head.morphTargetDictionary) return;
-
     if (currentViseme.current) {
-      const index = nodes.Wolf3D_Head.morphTargetDictionary[currentViseme.current];
-      if (index !== undefined && nodes.Wolf3D_Head.morphTargetInfluences) {
+      const index =
+        nodes.Wolf3D_Head.morphTargetDictionary[currentViseme.current];
+
+      nodes.Wolf3D_Head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+        nodes.Wolf3D_Head.morphTargetInfluences[index],
+        1,
+        morphTargetSmoothing
+      );
+
+      nodes.Wolf3D_Teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+        nodes.Wolf3D_Teeth.morphTargetInfluences[index],
+        1,
+        morphTargetSmoothing
+      );
+    } else {
+      Object.keys(nodes.Wolf3D_Head.morphTargetDictionary).forEach((key) => {
+        const index = nodes.Wolf3D_Head.morphTargetDictionary[key];
+
         nodes.Wolf3D_Head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
           nodes.Wolf3D_Head.morphTargetInfluences[index],
-          1,
-          morphTargetSmoothing
+          0,
+          0.15
         );
 
-        if (nodes.Wolf3D_Teeth && nodes.Wolf3D_Teeth.morphTargetInfluences) {
-          nodes.Wolf3D_Teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-            nodes.Wolf3D_Teeth.morphTargetInfluences[index],
-            1,
-            morphTargetSmoothing
-          );
-        }
-      }
-    } else {
-      const headDict = nodes.Wolf3D_Head?.morphTargetDictionary;
-      if (headDict) {
-        Object.keys(headDict).forEach((key) => {
-          const index = headDict[key];
-          if (nodes.Wolf3D_Head?.morphTargetInfluences) {
-            nodes.Wolf3D_Head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-              nodes.Wolf3D_Head.morphTargetInfluences[index],
-              0,
-              0.15
-            );
-          }
-          if (nodes.Wolf3D_Teeth?.morphTargetInfluences) {
-            nodes.Wolf3D_Teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-              nodes.Wolf3D_Teeth.morphTargetInfluences[index],
-              0,
-              0.15
-            );
-          }
-        });
-      }
+        nodes.Wolf3D_Teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+          nodes.Wolf3D_Teeth.morphTargetInfluences[index],
+          0,
+          0.15
+        );
+      });
     }
   });
 
   return (
-    <group position={position} scale={scale} dispose={null} ref={group}>
+    <group {...props} position={position} scale={scale} dispose={null} ref={group}>
       <primitive object={nodes.Hips} />
       <skinnedMesh
         geometry={nodes.Wolf3D_Hair.geometry}
@@ -281,9 +235,4 @@ function AvatarComponent({
   );
 }
 
-// Memoize to prevent re-renders when parent updates unrelated state
-export const Avatar = React.memo(AvatarComponent);
-
-// Preload the model
 useGLTF.preload("/models/674d75af3c0313725248ed0d.glb");
-

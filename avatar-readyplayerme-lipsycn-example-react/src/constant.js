@@ -1,4 +1,4 @@
-export const TEXTURE_PATH = "/textures/avatarBackground.png";
+export const TEXTURE_PATH = "/textures/avatarBackground.jpg";
 
 export const CORRESPONDING_VISEME = {
   A: "viseme_aa", // Mouth open wide
