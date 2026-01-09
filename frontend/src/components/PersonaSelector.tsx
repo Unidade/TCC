@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,49 +8,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Settings } from "lucide-react"
-import { getPersonas, Persona } from "@/lib/api"
+import { usePersonas } from "@/lib/queries/personas"
+import { usePersonaContext } from "@/contexts/PersonaContext"
 
-interface PersonaSelectorProps {
-  selectedPersonaId?: number
-  onPersonaChange?: (personaId: number) => void
-}
-
-export function PersonaSelector({ selectedPersonaId, onPersonaChange }: PersonaSelectorProps) {
+export function PersonaSelector() {
   const navigate = useNavigate()
-  const [personas, setPersonas] = useState<Persona[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadPersonas()
-  }, [])
-
-  const loadPersonas = async () => {
-    try {
-      const data = await getPersonas()
-      setPersonas(data)
-      // If no persona is selected and we have personas, select the first one
-      if (!selectedPersonaId && data.length > 0 && onPersonaChange) {
-        onPersonaChange(data[0].id)
-      }
-    } catch (err) {
-      console.error("Failed to load personas:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { selectedPersonaId, setSelectedPersonaId } = usePersonaContext()
+  const { data: personas, isLoading } = usePersonas()
 
   const handleChange = (value: string) => {
     const personaId = parseInt(value, 10)
-    if (onPersonaChange) {
-      onPersonaChange(personaId)
-    }
+    setSelectedPersonaId(personaId)
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="h-10 w-32 bg-muted animate-pulse rounded" />
   }
 
-  const selectedPersona = personas.find((p) => p.id === selectedPersonaId)
+  const selectedPersona = personas?.find((p) => p.id === selectedPersonaId)
 
   return (
     <div className="flex items-center gap-2">

@@ -85,3 +85,67 @@ export async function deletePersona(id: number): Promise<void> {
     throw new Error(error.detail || `Failed to delete persona: ${response.statusText}`)
   }
 }
+
+export interface InitialMessageResponse {
+  text: string
+  audio: string
+  duration: number
+  persona_id: number
+  persona_name: string
+}
+
+export async function getInitialMessage(personaId?: number): Promise<InitialMessageResponse> {
+  const url = personaId
+    ? `${API_BASE}/api/initial?persona_id=${personaId}`
+    : `${API_BASE}/api/initial`
+  const response = await fetch(url)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }))
+    throw new Error(error.detail || `Erro ao carregar mensagem inicial: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant"
+  content: string
+}
+
+export interface ChatRequest {
+  messages: ChatMessage[]
+  persona_id?: number
+}
+
+export interface ChatResponse {
+  text: string
+  audio?: string
+  duration?: number
+  error?: string
+}
+
+export async function sendChatMessage(
+  request: ChatRequest,
+  sessionId: string
+): Promise<ChatResponse> {
+  const response = await fetch(`${API_BASE}/api/chat/simple`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-session-id": sessionId,
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: "Erro desconhecido" }))
+    throw new Error(errorData.error || `Erro ao enviar mensagem: ${response.statusText}`)
+  }
+
+  const data = await response.json()
+
+  if (data.error) {
+    throw new Error(data.error)
+  }
+
+  return data
+}

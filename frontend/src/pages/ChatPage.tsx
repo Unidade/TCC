@@ -1,41 +1,23 @@
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { Canvas } from "@react-three/fiber"
 import { Experience } from "../components/Experience"
 import { ChatPanel } from "../components/ChatPanel"
 import { NameBadge } from "../components/NameBadge"
 import { PersonaSelector } from "../components/PersonaSelector"
-import { useAvatarChat } from "../hooks/useAvatarChat"
-import { getPersonas, Persona } from "../lib/api"
+import { useChat } from "../hooks/useChat"
+import { usePersonaContext } from "../contexts/PersonaContext"
+import { usePersonas, usePersona } from "../lib/queries/personas"
 
 export function ChatPage() {
-  const [selectedPersonaId, setSelectedPersonaId] = useState<number | undefined>()
-  const [persona, setPersona] = useState<Persona | null>(null)
+  const { selectedPersonaId, setSelectedPersonaId } = usePersonaContext()
+  const { data: personas } = usePersonas()
+  const { data: persona } = usePersona(selectedPersonaId)
 
-  // Load personas and select first one by default
   useEffect(() => {
-    getPersonas()
-      .then((personas) => {
-        if (personas.length > 0 && !selectedPersonaId) {
-          setSelectedPersonaId(personas[0].id)
-          setPersona(personas[0])
-        }
-      })
-      .catch(console.error)
-  }, [])
-
-  // Load persona details when selected
-  useEffect(() => {
-    if (selectedPersonaId) {
-      getPersonas()
-        .then((personas) => {
-          const found = personas.find((p) => p.id === selectedPersonaId)
-          if (found) {
-            setPersona(found)
-          }
-        })
-        .catch(console.error)
+    if (personas && personas.length > 0 && !selectedPersonaId) {
+      setSelectedPersonaId(personas[0].id)
     }
-  }, [selectedPersonaId])
+  }, [personas, selectedPersonaId, setSelectedPersonaId])
 
   const {
     messages,
@@ -48,7 +30,7 @@ export function ChatPage() {
     currentText,
     clearAudio,
     personaName,
-  } = useAvatarChat(selectedPersonaId)
+  } = useChat(selectedPersonaId)
 
   const displayName = personaName || persona?.name || "Carlos Silva"
   const displayRole = persona?.description || "Cliente"
@@ -59,10 +41,7 @@ export function ChatPage() {
         {/* Avatar View */}
         <div className="flex-1 relative min-h-[400px] md:min-h-0 bg-muted/20">
           <div className="absolute top-4 right-4 z-10">
-            <PersonaSelector
-              selectedPersonaId={selectedPersonaId}
-              onPersonaChange={setSelectedPersonaId}
-            />
+            <PersonaSelector />
           </div>
           <NameBadge name={displayName} role={displayRole} />
           <Canvas

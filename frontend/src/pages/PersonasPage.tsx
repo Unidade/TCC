@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -21,12 +21,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus, Edit, Trash2, ArrowLeft, Loader2 } from "lucide-react"
-import { getPersonas, createPersona, updatePersona, deletePersona, Persona, PersonaCreate } from "@/lib/api"
+import { PersonaCreate, Persona } from "@/lib/api"
+import {
+  usePersonas,
+  useCreatePersona,
+  useUpdatePersona,
+  useDeletePersona,
+} from "@/lib/queries/personas"
 
 export function PersonasPage() {
   const navigate = useNavigate()
-  const [personas, setPersonas] = useState<Persona[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: personas, isLoading: loading, error: queryError } = usePersonas()
+  const createMutation = useCreatePersona()
+  const updateMutation = useUpdatePersona()
+  const deleteMutation = useDeletePersona()
+
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null)
   const [formData, setFormData] = useState<PersonaCreate>({
@@ -36,24 +45,9 @@ export function PersonasPage() {
     initial_message: "",
     language: "pt-BR",
   })
-  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadPersonas()
-  }, [])
-
-  const loadPersonas = async () => {
-    try {
-      setLoading(true)
-      const data = await getPersonas()
-      setPersonas(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar personas")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const errorMessage = queryError instanceof Error ? queryError.message : null
 
   const handleOpenCreate = () => {
     setEditingPersona(null)
@@ -88,21 +82,17 @@ export function PersonasPage() {
     }
 
     try {
-      setSubmitting(true)
       setError(null)
 
       if (editingPersona) {
-        await updatePersona(editingPersona.id, formData)
+        await updateMutation.mutateAsync({ id: editingPersona.id, persona: formData })
       } else {
-        await createPersona(formData)
+        await createMutation.mutateAsync(formData)
       }
 
       setIsDialogOpen(false)
-      await loadPersonas()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar persona")
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -112,12 +102,13 @@ export function PersonasPage() {
     }
 
     try {
-      await deletePersona(id)
-      await loadPersonas()
+      await deleteMutation.mutateAsync(id)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao excluir persona")
     }
   }
+
+  const submitting = createMutation.isPending || updateMutation.isPending
 
   if (loading) {
     return (
@@ -149,14 +140,14 @@ export function PersonasPage() {
           </Button>
         </div>
 
-        {error && !isDialogOpen && (
+        {(error || errorMessage) && !isDialogOpen && (
           <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-            {error}
+            {error || errorMessage}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {personas.map((persona) => (
+          {personas?.map((persona) => (
             <Card key={persona.id} className="p-5">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -198,7 +189,7 @@ export function PersonasPage() {
           ))}
         </div>
 
-        {personas.length === 0 && (
+        {personas && personas.length === 0 && (
           <Card className="p-12 text-center">
             <p className="text-muted-foreground">Ainda não há personas. Crie sua primeira persona para começar.</p>
           </Card>
