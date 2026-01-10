@@ -104,3 +104,19 @@ class KokoroTTS:
         audio_bytes, duration = self.synthesize(text)
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
         return audio_base64, duration
+
+    async def synthesize_async(self, text: str) -> Tuple[bytes, float]:
+        """
+        Async wrapper for synthesize - runs in thread pool to avoid blocking event loop
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.synthesize, text)
+
+    async def synthesize_to_base64_async(self, text: str) -> Tuple[str, float]:
+        """
+        Async version of synthesize_to_base64 - non-blocking
+        """
+        audio_bytes, duration = await self.synthesize_async(text)
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        return audio_base64, duration

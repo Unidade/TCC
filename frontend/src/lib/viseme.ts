@@ -31,4 +31,4 @@ export const CORRESPONDING_VISEME: Record<string, string> = {
   Z: "viseme_SS", // "Z" (Hissing)
 };
 
-export const TEXTURE_PATH = "/textures/avatarBackground.png";
+export const TEXTURE_PATH = "/textures/avatarBackground.jpg";
