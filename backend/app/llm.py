@@ -1,7 +1,7 @@
 """
-Ollama LLM integration for conversation
+Ollama LLM integration for conversation (async version)
 """
-import requests
+import httpx
 from typing import Optional
 
 
@@ -13,9 +13,9 @@ class OllamaClient:
         self.conversation_history = []
         self.is_first_message = True
 
-    def chat(self, user_message: str) -> str:
+    async def chat(self, user_message: str) -> str:
         """
-        Send message to Ollama and get response
+        Send message to Ollama and get response (async, non-blocking)
         """
         # Add system prompt only on first message
         if self.is_first_message:
@@ -28,16 +28,16 @@ class OllamaClient:
             messages = self.conversation_history + [{"role": "user", "content": user_message}]
 
         try:
-            response = requests.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "stream": False
-                },
-                timeout=60
-            )
-            response.raise_for_status()
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "stream": False
+                    }
+                )
+                response.raise_for_status()
 
             result = response.json()
             assistant_message = result.get("message", {}).get("content", "")
@@ -47,7 +47,9 @@ class OllamaClient:
             self.conversation_history.append({"role": "assistant", "content": assistant_message})
 
             return assistant_message
-        except requests.exceptions.RequestException as e:
+        except httpx.HTTPStatusError as e:
+            raise Exception(f"Error communicating with Ollama: HTTP {e.response.status_code}")
+        except httpx.RequestError as e:
             raise Exception(f"Error communicating with Ollama: {str(e)}")
 
     def reset(self):

@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import json
 import logging
+import sys
+import requests
 from contextlib import asynccontextmanager
 from app.llm import OllamaClient
 from app.tts import KokoroTTS
@@ -16,14 +18,162 @@ from app.services.persona_service import PersonaService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configuration
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "gemma3:1b"
+
+
+class StartupError(Exception):
+    """Raised when a critical dependency check fails at startup"""
+    pass
+
+
+def check_ollama_running() -> bool:
+    """Check if Ollama service is running"""
+    try:
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        return response.status_code == 200
+    except requests.exceptions.RequestException:
+        return False
+
+
+def check_ollama_model_available(model: str) -> bool:
+    """Check if the required model is available in Ollama"""
+    try:
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        if response.status_code != 200:
+            return False
+        
+        data = response.json()
+        models = data.get("models", [])
+        model_names = [m.get("name", "") for m in models]
+        
+        # Check for exact match or match without tag (e.g., "qwen2.5:1.5b" or "qwen2.5")
+        for available_model in model_names:
+            if available_model == model or available_model.startswith(f"{model}:"):
+                return True
+            # Also check if requested model matches available (with or without :latest)
+            if model == available_model.replace(":latest", "") or available_model == f"{model}:latest":
+                return True
+        
+        return False
+    except requests.exceptions.RequestException:
+        return False
+
+
+def get_available_ollama_models() -> list[str]:
+    """Get list of available Ollama models"""
+    try:
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        if response.status_code != 200:
+            return []
+        
+        data = response.json()
+        return [m.get("name", "") for m in data.get("models", [])]
+    except requests.exceptions.RequestException:
+        return []
+
+
+def check_tts_available() -> tuple[bool, str]:
+    """Check if Kokoro TTS is properly configured"""
+    try:
+        from kokoro import KPipeline
+        # Try to initialize the pipeline
+        pipeline = KPipeline(lang_code="p")  # Portuguese
+        return True, "Kokoro TTS initialized successfully"
+    except ImportError as e:
+        return False, f"Kokoro TTS not installed: {e}"
+    except Exception as e:
+        return False, f"Kokoro TTS initialization error: {e}"
+
+
+def validate_startup_dependencies():
+    """
+    Validate all required dependencies at startup.
+    Raises StartupError if critical dependencies are missing.
+    """
+    errors = []
+    warnings = []
+    
+    logger.info("=" * 60)
+    logger.info("Validating startup dependencies...")
+    logger.info("=" * 60)
+    
+    # Check 1: Ollama service
+    logger.info("Checking Ollama service...")
+    if not check_ollama_running():
+        errors.append(
+            f"❌ Ollama is not running at {OLLAMA_BASE_URL}\n"
+            f"   Please start Ollama with: ollama serve"
+        )
+    else:
+        logger.info(f"✅ Ollama is running at {OLLAMA_BASE_URL}")
+        
+        # Check 2: Required model
+        logger.info(f"Checking for model '{OLLAMA_MODEL}'...")
+        if not check_ollama_model_available(OLLAMA_MODEL):
+            available_models = get_available_ollama_models()
+            if available_models:
+                models_list = ", ".join(available_models)
+                errors.append(
+                    f"❌ Model '{OLLAMA_MODEL}' not found in Ollama\n"
+                    f"   Available models: {models_list}\n"
+                    f"   Please run: ollama pull {OLLAMA_MODEL}"
+                )
+            else:
+                errors.append(
+                    f"❌ Model '{OLLAMA_MODEL}' not found. No models installed.\n"
+                    f"   Please run: ollama pull {OLLAMA_MODEL}"
+                )
+        else:
+            logger.info(f"✅ Model '{OLLAMA_MODEL}' is available")
+    
+    # Check 3: TTS
+    logger.info("Checking TTS service...")
+    tts_ok, tts_message = check_tts_available()
+    if not tts_ok:
+        warnings.append(f"⚠️  TTS Warning: {tts_message}")
+        logger.warning(f"⚠️  TTS Warning: {tts_message}")
+    else:
+        logger.info(f"✅ {tts_message}")
+    
+    # Report results
+    logger.info("=" * 60)
+    
+    if errors:
+        logger.error("Startup validation FAILED!")
+        logger.error("-" * 60)
+        for error in errors:
+            for line in error.split("\n"):
+                logger.error(line)
+        logger.error("-" * 60)
+        logger.error("Please fix the above issues and restart the server.")
+        raise StartupError("\n".join(errors))
+    
+    if warnings:
+        for warning in warnings:
+            logger.warning(warning)
+    
+    logger.info("✅ All dependency checks passed!")
+    logger.info("=" * 60)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize database
+    # Startup: Validate dependencies first
+    try:
+        validate_startup_dependencies()
+    except StartupError as e:
+        logger.error("Server cannot start due to missing dependencies")
+        sys.exit(1)
+    
+    # Initialize database
     await init_db()
+    
+    logger.info("🚀 Server started successfully!")
     yield
     # Shutdown: cleanup if needed
-    pass
+    logger.info("👋 Server shutting down...")
 
 
 app = FastAPI(title="TCC Interview Simulator", lifespan=lifespan)
@@ -83,7 +233,7 @@ async def get_initial_message(persona_id: int = None):
             persona = personas_list[0]
 
         initial_message = persona.initial_message
-        audio_base64, duration = tts_client.synthesize_to_base64(initial_message)
+        audio_base64, duration = await tts_client.synthesize_to_base64_async(initial_message)
         return {
             "text": initial_message,
             "audio": audio_base64,
@@ -124,7 +274,11 @@ async def chat(request: Request):
 
     # Get or create conversation client
     if session_id not in conversations:
-        conversations[session_id] = OllamaClient(system_prompt=system_prompt)
+        conversations[session_id] = OllamaClient(
+            base_url=OLLAMA_BASE_URL,
+            model=OLLAMA_MODEL,
+            system_prompt=system_prompt
+        )
     else:
         # Update system prompt if persona changed
         if system_prompt and conversations[session_id].system_prompt != system_prompt:
@@ -148,7 +302,7 @@ async def chat(request: Request):
     async def generate():
         try:
             # Get LLM response
-            response_text = llm_client.chat(user_message)
+            response_text = await llm_client.chat(user_message)
             logger.info(f"LLM response: {response_text[:50]}...")
 
             # Stream the text response in AI SDK format
@@ -157,7 +311,7 @@ async def chat(request: Request):
 
             # Generate audio after text
             try:
-                audio_base64, duration = tts_client.synthesize_to_base64(response_text)
+                audio_base64, duration = await tts_client.synthesize_to_base64_async(response_text)
                 # Send audio as data message
                 audio_data = json.dumps({
                     "audio": audio_base64,
@@ -207,7 +361,11 @@ async def chat_simple(request: Request):
 
     # Get or create conversation client
     if session_id not in conversations:
-        conversations[session_id] = OllamaClient(system_prompt=system_prompt)
+        conversations[session_id] = OllamaClient(
+            base_url=OLLAMA_BASE_URL,
+            model=OLLAMA_MODEL,
+            system_prompt=system_prompt
+        )
     else:
         # Update system prompt if persona changed
         if system_prompt and conversations[session_id].system_prompt != system_prompt:
@@ -228,11 +386,11 @@ async def chat_simple(request: Request):
 
     try:
         # Get LLM response
-        response_text = llm_client.chat(user_message)
+        response_text = await llm_client.chat(user_message)
 
         # Generate audio
         try:
-            audio_base64, duration = tts_client.synthesize_to_base64(response_text)
+            audio_base64, duration = await tts_client.synthesize_to_base64_async(response_text)
         except Exception as e:
             logger.error(f"Error generating audio: {e}")
             audio_base64 = None

@@ -86,27 +86,26 @@ export function useChat(personaId?: number): UseChatReturn {
 
       const userMsgId = crypto.randomUUID()
       const userMsg: Message = { id: userMsgId, role: "user", content: userMessage }
-      setMessages((prev) => {
-        const updated = [...prev, userMsg]
-        messagesRef.current = updated
-        return updated
-      })
+
+      // Update ref BEFORE setMessages to avoid race condition
+      const updatedMessages = [...messagesRef.current, userMsg]
+      messagesRef.current = updatedMessages
+      setMessages(updatedMessages)
 
       try {
-        // Use messagesRef to get the latest messages including the user message we just added
-        const currentMessages = messagesRef.current
+        // Use the already-updated messagesRef
         const data = await chatMutation.mutateAsync({
-          messages: currentMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: messagesRef.current.map((m) => ({ role: m.role, content: m.content })),
           persona_id: personaId,
         })
 
         const assistantMsgId = crypto.randomUUID()
         const assistantMsg: Message = { id: assistantMsgId, role: "assistant", content: data.text }
-        setMessages((prev) => {
-          const updated = [...prev, assistantMsg]
-          messagesRef.current = updated
-          return updated
-        })
+
+        // Update ref before setMessages for consistency
+        const updatedWithAssistant = [...messagesRef.current, assistantMsg]
+        messagesRef.current = updatedWithAssistant
+        setMessages(updatedWithAssistant)
 
         if (data.audio) {
           setCurrentAudio({
